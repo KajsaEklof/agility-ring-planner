@@ -77,7 +77,7 @@ A new course must be built when the **grade range** or **class type** changes. A
 
 ## Course Walk
 
-A 10-minute period before every class during which handlers walk the course without their dogs. Applies to **every** class — including height changes on the same course.
+A 10-minute period before every class during which handlers walk the course without their dogs. Applies to **every** class — including height changes on the same course. The walk before the **first class** of the day occurs before the show start time, so the first class begins exactly at the configured start time (no gap is added in the schedule).
 
 ---
 
@@ -102,7 +102,7 @@ Each dog takes **60 seconds** in the ring. A class with *n* entries takes *n* mi
 Where `preceding_gap` is:
 - **10 min** if the previous class in this ring was the same grade range **and** same type (height change only)
 - **25 min** if the previous class had a different grade range **or** different type (course change: 15 min rebuild + 10 min walk)
-- **10 min** for the first class of the day (course walk before the first run, no rebuild)
+- **0 min** for the first class of the day — the course walk happens *before* the configured show start time, so the first class begins exactly at the start time
 
 ---
 

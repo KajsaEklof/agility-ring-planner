@@ -9,6 +9,5 @@ FROM alpine:3.19
 WORKDIR /app
 COPY --from=build /app/agility-ring-planner .
 COPY --from=build /app/web ./web
-# COPY --from=build /app/testdata ./testdata
 EXPOSE 8080
 CMD ["./agility-ring-planner"]

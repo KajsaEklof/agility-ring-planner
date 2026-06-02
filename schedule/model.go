@@ -162,7 +162,7 @@ func (tc TimingConfig) changeMins() int {
 func (tc TimingConfig) GapMins(prev, next *Class) int {
 	walk := tc.walkMins()
 	if prev == nil {
-		return walk
+		return 0
 	}
 	if prev.IsSameCourse(next) {
 		return walk // height change only

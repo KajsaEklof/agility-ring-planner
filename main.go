@@ -7,7 +7,7 @@ import (
 	"os"
 	"time"
 
-	"github.com/projects/ring-planner/schedule"
+	"github.com/projects/agility-ring-planner/schedule"
 )
 
 type scheduleRequest struct {
@@ -60,6 +60,8 @@ func handleSchedule(w http.ResponseWriter, r *http.Request) {
 			startTime = time.Date(2000, 1, 1, t.Hour(), t.Minute(), 0, 0, time.UTC)
 		}
 	}
+
+	log.Printf("schedule request: show=%q date=%q classes=%d rings=%d", req.ShowName, req.Date, len(classes), req.NumRings)
 
 	plan := schedule.Schedule(classes, schedule.ScheduleOptions{
 		ShowName:          req.ShowName,

@@ -1,0 +1,745 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Ring Planner</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.2/Sortable.min.js"></script>
+<style>
+  /* Height colour tokens */
+  .ht-large        { --hc: #3b82f6; --hcl: #eff6ff; --hcb: #bfdbfe; }
+  .ht-medium       { --hc: #16a34a; --hcl: #f0fdf4; --hcb: #bbf7d0; }
+  .ht-small        { --hc: #ea580c; --hcl: #fff7ed; --hcb: #fed7aa; }
+  .ht-intermediate { --hc: #9333ea; --hcl: #faf5ff; --hcb: #e9d5ff; }
+  .ht-anysize      { --hc: #64748b; --hcl: #f8fafc; --hcb: #e2e8f0; }
+
+  .class-card {
+    background: var(--hcl);
+    border: 1.5px solid var(--hcb);
+    border-left: 4px solid var(--hc);
+    border-radius: 6px;
+    padding: 8px 10px;
+    margin-bottom: 6px;
+    cursor: grab;
+    -webkit-user-select: none;
+    user-select: none;
+    transition: box-shadow 0.15s, opacity 0.15s;
+  }
+  .class-card:hover { box-shadow: 0 2px 8px rgba(0,0,0,.12); }
+  .class-card.sortable-ghost { opacity: 0.35; }
+  .class-card.sortable-chosen { box-shadow: 0 4px 14px rgba(0,0,0,.18); }
+  .class-card.is-clash {
+    border-color: #ef4444 !important;
+    border-left-color: #ef4444 !important;
+    background: #fef2f2 !important;
+  }
+
+  .ring-col {
+    min-width: 200px;
+    flex: 1 1 200px;
+  }
+  .ring-drop-zone {
+    min-height: 80px;
+    border: 2px dashed #e5e7eb;
+    border-radius: 8px;
+    padding: 4px;
+    transition: border-color 0.15s;
+  }
+  .ring-drop-zone.sortable-over { border-color: #6366f1; background: #eef2ff; }
+
+  /* Print styles */
+  @media print {
+    .no-print { display: none !important; }
+    .print-only { display: block !important; }
+    body { background: white !important; font-size: 11px; }
+    .ring-plan-grid { display: flex !important; flex-wrap: nowrap; gap: 8px; }
+    .ring-col { min-width: 0; flex: 1; }
+    .class-card { page-break-inside: avoid; margin-bottom: 4px; padding: 4px 6px; cursor: default; }
+    #upload-section, #config-section, #stats-bar, #clashes-panel, #toolbar { display: none !important; }
+  }
+  .print-only { display: none; }
+</style>
+</head>
+<body class="bg-gray-100 min-h-screen text-gray-800">
+
+<!-- ===== HEADER ===== -->
+<header class="bg-white shadow-sm no-print">
+  <div class="max-w-screen-2xl mx-auto px-6 py-4 flex items-center gap-4">
+    <div>
+      <h1 class="text-xl font-bold tracking-tight">Ring Planner</h1>
+      <p class="text-xs text-gray-500">Dog Agility Show Scheduler</p>
+    </div>
+    <div id="step-pills" class="ml-auto flex gap-2 text-sm">
+      <span id="pill-1" class="px-3 py-1 rounded-full bg-indigo-600 text-white font-medium">1 Upload</span>
+      <span id="pill-2" class="px-3 py-1 rounded-full bg-gray-200 text-gray-500 font-medium">2 Configure</span>
+      <span id="pill-3" class="px-3 py-1 rounded-full bg-gray-200 text-gray-500 font-medium">3 Ring Plan</span>
+    </div>
+  </div>
+</header>
+
+<main class="max-w-screen-2xl mx-auto px-6 py-6">
+
+<!-- ===== STEP 1: UPLOAD ===== -->
+<section id="upload-section" class="no-print">
+  <div class="max-w-xl mx-auto">
+    <div class="bg-white rounded-xl shadow-sm p-8">
+      <h2 class="text-lg font-semibold mb-1">Upload your entries CSV</h2>
+      <p class="text-sm text-gray-500 mb-6">Required columns: <code class="bg-gray-100 px-1 rounded">entries</code>. Optional: <code class="bg-gray-100 px-1 rounded">class_no, class_name, format, type, grades, height</code>.</p>
+
+      <label id="drop-zone"
+        class="flex flex-col items-center justify-center w-full h-44 border-2 border-dashed border-gray-300 rounded-xl cursor-pointer hover:border-indigo-400 hover:bg-indigo-50 transition"
+        ondragover="event.preventDefault()" ondrop="handleFileDrop(event)">
+        <svg class="w-10 h-10 text-gray-400 mb-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5"
+            d="M9 13h6m-3-3v6m5 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414A1 1 0 0119 9.414V19a2 2 0 01-2 2z"/>
+        </svg>
+        <span class="text-sm text-gray-500">Drop CSV here or <span class="text-indigo-600 font-medium">click to browse</span></span>
+        <input id="file-input" type="file" accept=".csv,text/csv" class="hidden" onchange="handleFileSelect(event)">
+      </label>
+
+      <div id="file-name" class="text-sm text-indigo-600 mt-3 hidden"></div>
+      <div id="upload-error" class="text-sm text-red-600 mt-3 hidden"></div>
+
+      <div class="mt-6 flex gap-3">
+        <button onclick="downloadTemplate()" class="text-sm text-indigo-600 hover:underline">Download template CSV</button>
+        <button onclick="loadSample()" class="text-sm text-gray-500 hover:underline">Load sample data</button>
+      </div>
+
+      <button id="next-btn-1" onclick="goToConfig()" disabled
+        class="mt-6 w-full bg-indigo-600 disabled:bg-gray-300 text-white font-medium py-2.5 rounded-lg hover:bg-indigo-700 transition">
+        Next: Configure →
+      </button>
+    </div>
+  </div>
+</section>
+
+<!-- ===== STEP 2: CONFIGURE ===== -->
+<section id="config-section" class="hidden no-print">
+  <div class="max-w-xl mx-auto">
+    <div class="bg-white rounded-xl shadow-sm p-8">
+      <h2 class="text-lg font-semibold mb-6">Show configuration</h2>
+
+      <div class="grid grid-cols-2 gap-4">
+        <div class="col-span-2">
+          <label class="block text-sm font-medium text-gray-700 mb-1">Show name</label>
+          <input id="cfg-show-name" type="text" placeholder="e.g. Fun Agility"
+            class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400">
+        </div>
+        <div>
+          <label for="cfg-date" class="block text-sm font-medium text-gray-700 mb-1">Date</label>
+          <input id="cfg-date" type="date"
+            class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400">
+        </div>
+        <div>
+          <label for="cfg-start" class="block text-sm font-medium text-gray-700 mb-1">Start time</label>
+          <input id="cfg-start" type="time" value="09:00"
+            class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400">
+        </div>
+        <div>
+          <label for="cfg-min-rings" class="block text-sm font-medium text-gray-700 mb-1">Min rings</label>
+          <input id="cfg-min-rings" type="number" min="1" max="12" placeholder="Auto"
+            class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400">
+          <p class="text-xs text-gray-400 mt-1">Floor — e.g. 5</p>
+        </div>
+        <div>
+          <label class="block text-sm font-medium text-gray-700 mb-1">Max rings</label>
+          <input id="cfg-max-rings" type="number" min="1" max="12" placeholder="8"
+            class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400">
+          <p class="text-xs text-gray-400 mt-1">Cap — e.g. 7</p>
+        </div>
+        <div>
+          <label class="block text-sm font-medium text-gray-700 mb-1">Max course changes / ring</label>
+          <input id="cfg-changes" type="number" min="1" max="10" placeholder="3"
+            class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400">
+          <p class="text-xs text-gray-400 mt-1">Groups classes by course</p>
+        </div>
+        <div>
+          <label class="block text-sm font-medium text-gray-700 mb-1">Secs per dog</label>
+          <input id="cfg-secs" type="number" min="30" max="180" placeholder="60"
+            class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400">
+        </div>
+        <div>
+          <label class="block text-sm font-medium text-gray-700 mb-1">Course walk (mins)</label>
+          <input id="cfg-walk" type="number" min="5" max="30" placeholder="10"
+            class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400">
+        </div>
+        <div>
+          <label class="block text-sm font-medium text-gray-700 mb-1">Course change (extra mins)</label>
+          <input id="cfg-change" type="number" min="5" max="60" placeholder="15"
+            class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400">
+          <p class="text-xs text-gray-400 mt-1">Added on top of walk time</p>
+        </div>
+      </div>
+
+      <div class="flex gap-3 mt-6">
+        <button onclick="goToUpload()" class="flex-1 border border-gray-300 text-gray-700 font-medium py-2.5 rounded-lg hover:bg-gray-50 transition text-sm">
+          ← Back
+        </button>
+        <button onclick="generatePlan()" id="generate-btn"
+          class="flex-2 flex-grow bg-indigo-600 text-white font-medium py-2.5 rounded-lg hover:bg-indigo-700 transition text-sm">
+          Generate Ring Plan →
+        </button>
+      </div>
+      <div id="config-error" class="text-sm text-red-600 mt-3 hidden"></div>
+    </div>
+  </div>
+</section>
+
+<!-- ===== STEP 3: RING PLAN ===== -->
+<section id="plan-section" class="hidden">
+
+  <!-- Toolbar -->
+  <div id="toolbar" class="no-print flex items-center gap-4 mb-4 flex-wrap">
+    <button onclick="goToConfig()" class="text-sm text-gray-500 hover:text-gray-800">← Reconfigure</button>
+    <div class="flex-1"></div>
+    <button onclick="addRing()" class="text-sm px-3 py-1.5 border border-gray-300 rounded-lg hover:bg-gray-50">+ Add ring</button>
+    <button onclick="window.print()" class="text-sm px-3 py-1.5 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700">🖨 Print / Save PDF</button>
+  </div>
+
+  <!-- Print header (only visible on print) -->
+  <div class="print-only mb-4">
+    <h1 id="print-title" class="text-xl font-bold"></h1>
+    <p id="print-subtitle" class="text-sm text-gray-600"></p>
+  </div>
+
+  <!-- Stats bar -->
+  <div id="stats-bar" class="no-print grid grid-cols-2 sm:grid-cols-4 gap-3 mb-4">
+    <div class="bg-white rounded-lg shadow-sm px-4 py-3">
+      <div class="text-xs text-gray-500 uppercase tracking-wide">Classes</div>
+      <div id="stat-classes" class="text-2xl font-bold">—</div>
+    </div>
+    <div class="bg-white rounded-lg shadow-sm px-4 py-3">
+      <div class="text-xs text-gray-500 uppercase tracking-wide">Entries</div>
+      <div id="stat-entries" class="text-2xl font-bold">—</div>
+    </div>
+    <div class="bg-white rounded-lg shadow-sm px-4 py-3">
+      <div class="text-xs text-gray-500 uppercase tracking-wide">Est. finish</div>
+      <div id="stat-finish" class="text-2xl font-bold">—</div>
+    </div>
+    <div class="bg-white rounded-lg shadow-sm px-4 py-3">
+      <div class="text-xs text-gray-500 uppercase tracking-wide">Clashes</div>
+      <div id="stat-clashes" class="text-2xl font-bold">—</div>
+    </div>
+  </div>
+
+  <!-- Clashes panel -->
+  <div id="clashes-panel" class="no-print hidden mb-4 bg-red-50 border border-red-200 rounded-xl p-4">
+    <div class="flex items-center gap-2 mb-2">
+      <span class="text-red-600 font-semibold text-sm">⚠ Clashes detected</span>
+      <span class="text-xs text-red-500">Classes highlighted in red are running simultaneously and share eligible dogs</span>
+    </div>
+    <div id="clashes-list" class="text-xs text-red-700 space-y-1"></div>
+  </div>
+
+  <!-- Ring plan grid -->
+  <div id="ring-plan-grid" class="ring-plan-grid flex gap-4 overflow-x-auto pb-4 items-start">
+  </div>
+
+</section>
+
+</main>
+
+<script>
+// ===== STATE =====
+let csvContent = null;
+let planData = null;        // last response from server
+let classMap = {};          // classNo → class object
+let ringState = [];         // [{number, judge, classNos:[]}]
+let timingCfg = { secsPerDog: 60, walkMins: 10, changeMins: 15 };
+let startTime = { h: 9, m: 0 };
+let sortableInstances = [];
+
+// ===== NAVIGATION =====
+function goToUpload() {
+  show('upload-section'); hide('config-section'); hide('plan-section');
+  setPill(1);
+}
+function goToConfig() {
+  if (!csvContent) return;
+  show('config-section'); hide('upload-section'); hide('plan-section');
+  setPill(2);
+}
+function goToPlan() {
+  hide('upload-section'); hide('config-section'); show('plan-section');
+  setPill(3);
+}
+function setPill(n) {
+  [1,2,3].forEach(i => {
+    const el = document.getElementById('pill-' + i);
+    if (i === n) { el.className = 'px-3 py-1 rounded-full bg-indigo-600 text-white font-medium'; }
+    else { el.className = 'px-3 py-1 rounded-full bg-gray-200 text-gray-500 font-medium'; }
+  });
+}
+function show(id) { document.getElementById(id).classList.remove('hidden'); }
+function hide(id) { document.getElementById(id).classList.add('hidden'); }
+
+// ===== FILE UPLOAD =====
+function handleFileDrop(e) {
+  e.preventDefault();
+  const file = e.dataTransfer.files[0];
+  if (file) readFile(file);
+}
+function handleFileSelect(e) {
+  const file = e.target.files[0];
+  if (file) readFile(file);
+}
+function readFile(file) {
+  const reader = new FileReader();
+  reader.onload = (e) => {
+    csvContent = e.target.result;
+    document.getElementById('file-name').textContent = '✓ ' + file.name;
+    document.getElementById('file-name').classList.remove('hidden');
+    document.getElementById('upload-error').classList.add('hidden');
+    document.getElementById('next-btn-1').disabled = false;
+  };
+  reader.readAsText(file);
+}
+
+// ===== TEMPLATE DOWNLOAD =====
+function downloadTemplate() {
+  const csv = `class_no,class_name,format,type,grades,height,entries
+10,Sml Agility G1-2,G,Agility,1-2,Small,9
+23,Med Agility G1-2,G,Agility,1-2,Medium,24
+36,Int Agility G1-2,G,Agility,1-2,Intermediate,13
+49,Lge Agility G1-2,G,Agility,1-2,Large,25
+55,Anysize Jumping,Anysize,Jumping,,Anysize,27
+`;
+  const a = document.createElement('a');
+  a.href = 'data:text/csv;charset=utf-8,' + encodeURIComponent(csv);
+  a.download = 'ring_planner_template.csv';
+  a.click();
+}
+
+// ===== SAMPLE DATA =====
+async function loadSample() {
+  try {
+    const resp = await fetch('/testdata/sample.csv');
+    if (!resp.ok) throw new Error('not found');
+    csvContent = await resp.text();
+  } catch {
+    // Inline fallback
+    csvContent = `class_no,class_name,format,type,grades,height,entries
+10,Sml Agility G1-2,G,Agility,1-2,Small,9
+23,Med Agility G1-2,G,Agility,1-2,Medium,24
+36,Int Agility G1-2,G,Agility,1-2,Intermediate,13
+49,Lge Agility G1-2,G,Agility,1-2,Large,25
+11,Sml Agility G3-5,G,Agility,3-5,Small,17
+24,Med Agility G3-5,G,Agility,3-5,Medium,37
+37,Int Agility G3-5,G,Agility,3-5,Intermediate,33
+50,Lge Agility G3-5,G,Agility,3-5,Large,37
+5,Sml Agility C3-4,C,Agility,3-4,Small,9
+18,Med Agility C3-4,C,Agility,3-4,Medium,22
+31,Int Agility C3-4,C,Agility,3-4,Intermediate,18
+44,Lge Agility C3-4,C,Agility,3-4,Large,25
+7,Sml Jumping G1-3,G,Jumping,1-3,Small,12
+20,Med Jumping G1-3,G,Jumping,1-3,Medium,45
+33,Int Jumping G1-3,G,Jumping,1-3,Intermediate,23
+46,Lge Jumping G1-3,G,Jumping,1-3,Large,30
+8,Sml Jumping G4-5,G,Jumping,4-5,Small,11
+21,Med Jumping G4-5,G,Jumping,4-5,Medium,17
+34,Int Jumping G4-5,G,Jumping,4-5,Intermediate,23
+47,Lge Jumping G4-5,G,Jumping,4-5,Large,24
+53,Anysize Jumping,Anysize,Jumping,,Anysize,24
+`;
+  }
+  document.getElementById('file-name').textContent = '✓ sample data loaded';
+  document.getElementById('file-name').classList.remove('hidden');
+  document.getElementById('next-btn-1').disabled = false;
+}
+
+// ===== GENERATE PLAN =====
+async function generatePlan() {
+  const btn = document.getElementById('generate-btn');
+  btn.textContent = 'Generating…';
+  btn.disabled = true;
+
+  const judges = [];
+  for (let i = 1; i <= 10; i++) {
+    const el = document.getElementById('judge-' + i);
+    if (el) judges.push(el.value.trim());
+  }
+
+  const minRings   = parseInt(document.getElementById('cfg-min-rings').value) || 0;
+  const maxRings   = parseInt(document.getElementById('cfg-max-rings').value) || 0;
+  const maxChanges = parseInt(document.getElementById('cfg-changes').value)   || 0;
+
+  const payload = {
+    csv:               csvContent,
+    showName:          document.getElementById('cfg-show-name').value.trim(),
+    date:              document.getElementById('cfg-date').value,
+    startTime:         document.getElementById('cfg-start').value || '09:00',
+    numRings:          0,
+    minRings,
+    maxRings,
+    maxChangesPerRing: maxChanges,
+    secsPerDog:        parseInt(document.getElementById('cfg-secs').value)    || 0,
+    walkMins:          parseInt(document.getElementById('cfg-walk').value)    || 0,
+    changeMins:        parseInt(document.getElementById('cfg-change').value)  || 0,
+    judges,
+  };
+
+  try {
+    const resp = await fetch('/api/schedule', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+    const data = await resp.json();
+
+    if (!data.success) {
+      document.getElementById('config-error').textContent = data.error;
+      document.getElementById('config-error').classList.remove('hidden');
+      return;
+    }
+
+    document.getElementById('config-error').classList.add('hidden');
+    planData = data.plan;
+    timingCfg = {
+      secsPerDog: planData.timing.secsPerDog || 60,
+      walkMins:   planData.timing.walkMins   || 10,
+      changeMins: planData.timing.changeMins || 15,
+    };
+
+    // Parse start time
+    const st = payload.startTime.split(':');
+    startTime = { h: parseInt(st[0]), m: parseInt(st[1]) };
+
+    initPlanState(planData);
+    renderPlan();
+    goToPlan();
+
+  } catch (err) {
+    document.getElementById('config-error').textContent = 'Server error: ' + err.message;
+    document.getElementById('config-error').classList.remove('hidden');
+  } finally {
+    btn.textContent = 'Generate Ring Plan →';
+    btn.disabled = false;
+  }
+}
+
+// ===== PLAN STATE =====
+function initPlanState(plan) {
+  classMap = {};
+  ringState = [];
+
+  plan.rings.forEach(ring => {
+    const classNos = [];
+    ring.slots.forEach(slot => {
+      classMap[slot.class.number] = slot.class;
+      classNos.push(slot.class.number);
+    });
+    ringState.push({
+      number: ring.number,
+      name:   ring.name,
+      judge:  ring.judge || '',
+      classNos,
+    });
+  });
+}
+
+function addRing() {
+  const n = ringState.length + 1;
+  ringState.push({ number: n, name: 'Ring ' + n, judge: '', classNos: [] });
+  renderPlan();
+}
+
+function deleteRing(ri) {
+  if (ringState[ri].classNos.length > 0) return;
+  ringState.splice(ri, 1);
+  ringState.forEach((r, i) => { r.number = i + 1; r.name = 'Ring ' + (i + 1); });
+  renderPlan();
+}
+
+// ===== RENDER =====
+function renderPlan() {
+  recalcTimes();
+  const clashes = findClashes();
+  const clashSet = new Set();
+  clashes.forEach(c => { clashSet.add(c.a); clashSet.add(c.b); });
+
+  // Stats
+  const allClasses = Object.values(classMap);
+  document.getElementById('stat-classes').textContent = allClasses.length;
+  document.getElementById('stat-entries').textContent = allClasses.reduce((s, c) => s + c.entries, 0);
+  document.getElementById('stat-finish').textContent  = calcFinishTime();
+  document.getElementById('stat-clashes').textContent = clashes.length;
+  document.getElementById('stat-clashes').className = 'text-2xl font-bold ' + (clashes.length ? 'text-red-600' : 'text-green-600');
+
+  // Clashes panel
+  if (clashes.length) {
+    document.getElementById('clashes-panel').classList.remove('hidden');
+    document.getElementById('clashes-list').innerHTML = clashes.map(c =>
+      `<div>Ring ${c.ringA} #${c.a} <em>${classMap[c.a]?.name}</em> ↔ Ring ${c.ringB} #${c.b} <em>${classMap[c.b]?.name}</em></div>`
+    ).join('');
+  } else {
+    document.getElementById('clashes-panel').classList.add('hidden');
+  }
+
+  // Print header
+  const showName = document.getElementById('cfg-show-name').value || 'Ring Plan';
+  const date = document.getElementById('cfg-date').value;
+  document.getElementById('print-title').textContent = showName;
+  document.getElementById('print-subtitle').textContent = date ? formatDate(date) : '';
+
+  // Destroy old Sortable instances
+  sortableInstances.forEach(s => s.destroy());
+  sortableInstances = [];
+
+  // Render grid
+  const grid = document.getElementById('ring-plan-grid');
+  grid.innerHTML = '';
+
+  ringState.forEach((ring, ri) => {
+    const col = document.createElement('div');
+    col.className = 'ring-col';
+    col.innerHTML = `
+      <div class="bg-white rounded-xl shadow-sm overflow-hidden">
+        <div class="bg-gray-50 border-b border-gray-200 px-3 py-2 no-print">
+          <div class="flex items-center gap-2">
+            <span class="font-semibold text-sm text-gray-800">Ring ${ring.number}</span>
+            <span class="text-xs text-gray-400 ml-auto">${totalEntries(ring)} entries</span>
+            ${ring.classNos.length === 0 ? `<button onclick="deleteRing(${ri})" title="Remove empty ring" class="delete-ring-btn ml-1 text-gray-400 hover:text-red-500 transition-colors" style="line-height:1">✕</button>` : ''}
+          </div>
+          <input type="text" placeholder="Judge name" value="${escHtml(ring.judge)}"
+            class="mt-1 w-full text-xs border-0 bg-transparent text-gray-600 placeholder-gray-400 focus:outline-none focus:ring-1 focus:ring-indigo-300 rounded px-1"
+            onchange="ringState[${ri}].judge = this.value; refreshPrintHeader()">
+        </div>
+        <div class="print-only bg-gray-50 border-b border-gray-200 px-3 py-2">
+          <div class="font-semibold text-sm">Ring ${ring.number}${ring.judge ? ' — ' + escHtml(ring.judge) : ''}</div>
+        </div>
+        <div class="ring-drop-zone p-2" id="ring-drop-${ri}">
+          ${ring.classNos.map(no => renderCard(no, clashSet)).join('')}
+        </div>
+      </div>`;
+    grid.appendChild(col);
+
+    // Wire Sortable
+    const zone = document.getElementById('ring-drop-' + ri);
+    sortableInstances.push(new Sortable(zone, {
+      group:     'rings',
+      animation: 120,
+      ghostClass: 'sortable-ghost',
+      chosenClass: 'sortable-chosen',
+      onEnd: handleDragEnd,
+    }));
+  });
+}
+
+function renderCard(classNo, clashSet) {
+  const cls = classMap[classNo];
+  if (!cls) return '';
+  const htClass = htCssClass(cls.height);
+  const clash = clashSet && clashSet.has(classNo) ? ' is-clash' : '';
+  const slot = slotMap[classNo] || {};
+  const timeStr = slot.start ? `${slot.start} – ${slot.end}` : '';
+  const gradeLbl = cls.grades && cls.grades.length
+    ? `${cls.format}${cls.grades[0]}${cls.grades[cls.grades.length-1] !== cls.grades[0] ? '–' + cls.grades[cls.grades.length-1] : ''}`
+    : '';
+
+  return `<div class="class-card ${htClass}${clash}" data-class-no="${classNo}">
+    <div class="flex items-start justify-between gap-1">
+      <span class="text-xs font-bold text-gray-700">#${classNo}</span>
+      <span class="text-xs px-1.5 py-0.5 rounded font-medium ${typeBadgeCss(cls.type)}">${cls.type[0]}</span>
+    </div>
+    <div class="text-xs font-semibold text-gray-800 leading-snug mt-0.5">${escHtml(cls.name)}</div>
+    <div class="flex items-center gap-2 mt-1 text-xs text-gray-500">
+      <span class="font-medium" style="color:var(--hc)">${htLabel(cls.height)}</span>
+      ${gradeLbl ? `<span>${escHtml(gradeLbl)}</span>` : ''}
+      <span>${cls.entries} dogs</span>
+    </div>
+    ${timeStr ? `<div class="text-xs text-gray-500 mt-1 font-mono">${timeStr}</div>` : ''}
+  </div>`;
+}
+
+function htCssClass(h) {
+  const m = { Large: 'ht-large', Medium: 'ht-medium', Small: 'ht-small', Intermediate: 'ht-intermediate', Anysize: 'ht-anysize' };
+  return m[h] || 'ht-anysize';
+}
+function htLabel(h) {
+  const m = { Large: 'Lge', Medium: 'Med', Small: 'Sml', Intermediate: 'Int', Anysize: 'Any' };
+  return m[h] || h;
+}
+function typeBadgeCss(t) {
+  const m = { Agility: 'bg-blue-100 text-blue-800', Jumping: 'bg-amber-100 text-amber-800', Steeplechase: 'bg-red-100 text-red-800' };
+  return m[t] || 'bg-gray-100 text-gray-700';
+}
+
+// ===== DRAG END =====
+function handleDragEnd() {
+  // Rebuild ringState from DOM
+  ringState.forEach((ring, ri) => {
+    const zone = document.getElementById('ring-drop-' + ri);
+    if (!zone) return;
+    ring.classNos = Array.from(zone.querySelectorAll('[data-class-no]'))
+      .map(el => parseInt(el.dataset.classNo));
+  });
+  // Remove empty rings (optional — keep them so manager can drag back)
+  recalcTimes();
+  const clashes = findClashes();
+  const clashSet = new Set();
+  clashes.forEach(c => { clashSet.add(c.a); clashSet.add(c.b); });
+
+  // Update card times and clash highlighting in-place
+  document.querySelectorAll('[data-class-no]').forEach(card => {
+    const no = parseInt(card.dataset.classNo);
+    const slot = slotMap[no] || {};
+    const timeEl = card.querySelector('.font-mono');
+    if (timeEl && slot.start) timeEl.textContent = `${slot.start} – ${slot.end}`;
+    card.classList.toggle('is-clash', clashSet.has(no));
+  });
+
+  // Sync delete-button visibility with actual ring contents
+  ringState.forEach((ring, ri) => {
+    const col = document.getElementById('ring-drop-' + ri)?.closest('.ring-col');
+    if (!col) return;
+    const existing = col.querySelector('.delete-ring-btn');
+    if (ring.classNos.length === 0 && !existing) {
+      const entrySpan = col.querySelector('.text-xs.text-gray-400');
+      const btn = document.createElement('button');
+      btn.className = 'delete-ring-btn ml-1 text-gray-400 hover:text-red-500 transition-colors';
+      btn.title = 'Remove empty ring';
+      btn.style.lineHeight = '1';
+      btn.textContent = '✕';
+      btn.onclick = () => deleteRing(ri);
+      entrySpan?.insertAdjacentElement('afterend', btn);
+    } else if (ring.classNos.length > 0 && existing) {
+      existing.remove();
+    }
+  });
+
+  // Update stats
+  document.getElementById('stat-clashes').textContent = clashes.length;
+  document.getElementById('stat-clashes').className = 'text-2xl font-bold ' + (clashes.length ? 'text-red-600' : 'text-green-600');
+  document.getElementById('stat-finish').textContent = calcFinishTime();
+
+  if (clashes.length) {
+    document.getElementById('clashes-panel').classList.remove('hidden');
+    document.getElementById('clashes-list').innerHTML = clashes.map(c =>
+      `<div>Ring ${c.ringA} #${c.a} <em>${classMap[c.a]?.name}</em> ↔ Ring ${c.ringB} #${c.b} <em>${classMap[c.b]?.name}</em></div>`
+    ).join('');
+  } else {
+    document.getElementById('clashes-panel').classList.add('hidden');
+  }
+
+  // Update ring entry counts
+  ringState.forEach((ring, ri) => {
+    const col = document.querySelector(`#ring-drop-${ri}`)?.closest('.bg-white');
+    if (!col) return;
+    const counter = col.querySelector('.text-gray-400');
+    if (counter) counter.textContent = totalEntries(ring) + ' entries';
+  });
+}
+
+// ===== TIME CALCULATION =====
+let slotMap = {}; // classNo → { start, end, startMins }
+
+function recalcTimes() {
+  slotMap = {};
+  const baseMins = startTime.h * 60 + startTime.m;
+
+  ringState.forEach(ring => {
+    let cur = baseMins;
+    let prevClass = null;
+
+    ring.classNos.forEach(no => {
+      const cls = classMap[no];
+      if (!cls) return;
+      const gap = gapMins(prevClass, cls);
+      cur += gap;
+      const runMins = Math.ceil(cls.entries * timingCfg.secsPerDog / 60);
+      slotMap[no] = {
+        start:    minsToTime(cur),
+        end:      minsToTime(cur + runMins),
+        startMins: cur,
+        endMins:  cur + runMins,
+      };
+      cur += runMins;
+      prevClass = cls;
+    });
+  });
+}
+
+function gapMins(prev, next) {
+  const walk = timingCfg.walkMins || 10;
+  const change = timingCfg.changeMins || 15;
+  if (!prev) return walk;
+  if (isSameCourse(prev, next)) return walk;
+  return walk + change;
+}
+
+function isSameCourse(a, b) {
+  if (a.format === 'Anysize' || a.format === 'ABC' || b.format === 'Anysize' || b.format === 'ABC') return false;
+  if (a.type !== b.type) return false;
+  const ag = (a.grades || []).slice().sort().join(',');
+  const bg = (b.grades || []).slice().sort().join(',');
+  return ag === bg;
+}
+
+function minsToTime(mins) {
+  const h = Math.floor(mins / 60) % 24;
+  const m = mins % 60;
+  return String(h).padStart(2, '0') + ':' + String(m).padStart(2, '0');
+}
+
+function calcFinishTime() {
+  let latest = startTime.h * 60 + startTime.m;
+  Object.values(slotMap).forEach(s => { if (s.endMins > latest) latest = s.endMins; });
+  return minsToTime(latest);
+}
+
+function totalEntries(ring) {
+  return (ring.classNos || []).reduce((s, no) => s + (classMap[no]?.entries || 0), 0);
+}
+
+// ===== CLASH DETECTION =====
+function findClashes() {
+  const clashes = [];
+  const ringOf = {}; // classNo → ringNumber
+  ringState.forEach(ring => {
+    ring.classNos.forEach(no => { ringOf[no] = ring.number; });
+  });
+
+  const allNos = Object.keys(slotMap).map(Number);
+  for (let i = 0; i < allNos.length; i++) {
+    for (let j = i + 1; j < allNos.length; j++) {
+      const a = allNos[i], b = allNos[j];
+      if (ringOf[a] === ringOf[b]) continue; // same ring — sequential, no clash
+      const ca = classMap[a], cb = classMap[b];
+      if (!ca || !cb) continue;
+      if (!conflictsWith(ca, cb)) continue;
+      const sa = slotMap[a], sb = slotMap[b];
+      if (sa.startMins < sb.endMins && sb.startMins < sa.endMins) {
+        clashes.push({ a, b, ringA: ringOf[a], ringB: ringOf[b] });
+      }
+    }
+  }
+  return clashes;
+}
+
+function conflictsWith(a, b) {
+  if (a.format === 'Anysize' || a.format === 'ABC') return false;
+  if (b.format === 'Anysize' || b.format === 'ABC') return false;
+  if (a.height !== b.height) return false;
+  const ag = new Set(a.grades || []);
+  return (b.grades || []).some(g => ag.has(g));
+}
+
+// ===== UTILITIES =====
+function escHtml(s) {
+  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+function formatDate(d) {
+  return new Date(d).toLocaleDateString('en-GB', { weekday:'long', day:'numeric', month:'long', year:'numeric' });
+}
+function refreshPrintHeader() {
+  // Update print-only judge lines — triggered on judge input change
+}
+
+// ===== INIT =====
+document.getElementById('drop-zone').addEventListener('click', () => {
+  document.getElementById('file-input').click();
+});
+</script>
+</body>
+</html>
