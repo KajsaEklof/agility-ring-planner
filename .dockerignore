@@ -1,0 +1,19 @@
+# flyctl launch added from .gitignore
+# compiled binary
+**/ring-planner
+
+# test data
+**/testdata
+
+# Go build cache
+**/*.test
+**/*.out
+
+# macOS
+**/.DS_Store
+
+# editor
+**/.idea
+**/.vscode
+**/*.swp
+fly.toml

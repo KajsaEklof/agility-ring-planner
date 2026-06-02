@@ -1,6 +1,9 @@
-# If you prefer the allow list template instead of the deny list, see community template:
-# https://github.com/github/gitignore/blob/main/community/Golang/Go.AllowList.gitignore
-#
+# compiled binary
+agility-ring-planner
+
+# test data
+testdata/
+
 # Binaries for programs and plugins
 *.exe
 *.exe~
@@ -20,6 +23,9 @@ profile.cov
 # Dependency directories (remove the comment below to include it)
 # vendor/
 
+# macOS
+.DS_Store
+
 # Go workspace file
 go.work
 go.work.sum
@@ -27,6 +33,7 @@ go.work.sum
 # env file
 .env
 
-# Editor/IDE
-# .idea/
-# .vscode/
+# editor
+.idea/
+.vscode/
+*.swp
